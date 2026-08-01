@@ -8,6 +8,7 @@ from flask import Flask, g, jsonify, request
 from dotenv import load_dotenv
 load_dotenv()
 import llm
+from anonymize import Pseudonymizer
 from auth import authenticate, create_token, ensure_demo_user, require_auth
 from detectors import DETECTORS
 from parser import parse_file
@@ -119,7 +120,6 @@ def upload():
         'stats': summarize(records, skipped),
         'findings': findings,
         'timeline': build_timeline(records, findings),
-        'summary': llm.summarize_findings(summarize(records, skipped), findings),
     }
     ANALYSES[upload_id] = {'owner': g.username, 'result': result}
     return jsonify(result), 201
@@ -137,6 +137,30 @@ def get_results(upload_id):
 
 
 MAX_EVENTS = 200
+
+
+@app.route('/api/results/<upload_id>/summarize', methods=['POST'])
+@require_auth
+def generate_summary(upload_id):
+    """AI triage summary, on demand. Cached on the analysis after the first
+    call so repeat clicks are free."""
+    entry = ANALYSES.get(upload_id)
+    if entry is None or entry['owner'] != g.username:
+        return jsonify({'error': 'unknown upload id'}), 404
+
+    result = entry['result']
+    if 'summary' in result:
+        return jsonify(result['summary'])
+
+    saved_path = UPLOAD_DIR / f"{upload_id}.log"
+    if not saved_path.exists():
+        return jsonify({'error': 'log file no longer available'}), 410
+    records, _ = parse_file(str(saved_path))
+
+    summary = llm.summarize_findings(result['stats'], result['findings'],
+                                     Pseudonymizer(records))
+    result['summary'] = summary
+    return jsonify(summary)
 
 
 @app.route('/api/results/<upload_id>/investigate', methods=['POST'])
@@ -165,7 +189,8 @@ def investigate(upload_id):
         return jsonify({'error': 'log file no longer available'}), 410
     records, _ = parse_file(str(saved_path))
 
-    return jsonify(llm.investigate_finding(finding, build_registry(records)))
+    return jsonify(llm.investigate_finding(finding, build_registry(records),
+                                           Pseudonymizer(records)))
 
 
 @app.route('/api/results/<upload_id>/events')

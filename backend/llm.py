@@ -39,14 +39,17 @@ Rules:
 - Do not speculate about attacker identity or attribution.
 - If the findings do not support a judgement, use "inconclusive".
 - Recommended actions must be investigative steps an analyst can take today.
+- Write for a SOC analyst mid-shift: telegraphic fragments, entity and numbers
+  first, no filler words. "10.0.1.11: 60 req/min at 10:30, baseline 1.5" not
+  "The host 10.0.1.11 generated a large number of requests".
 
 Return ONLY JSON matching:
 {
   "assessment": "benign" | "suspicious" | "malicious" | "inconclusive",
-  "summary": "2-4 sentences describing what happened",
-  "key_observations": ["..."],
+  "summary": "1-2 tight sentences: what happened, worst first",
+  "key_observations": ["one fact each, entity first, fragment style"],
   "correlations": ["entities appearing in multiple findings, or a note that none do"],
-  "recommended_actions": ["..."]
+  "recommended_actions": ["imperative fragments, most urgent first"]
 }"""
 
 ASSESSMENTS = {"benign", "suspicious", "malicious", "inconclusive"}
@@ -79,9 +82,12 @@ def _fallback_summary(findings: list[dict]) -> dict:
     }
 
 
-def summarize_findings(stats: dict, findings: list[dict]) -> dict:
+def summarize_findings(stats: dict, findings: list[dict], pseudo=None) -> dict:
     if not enabled():
         return _fallback_summary(findings)
+
+    scrub = pseudo.scrub if pseudo else (lambda t: t)
+    unscrub = pseudo.unscrub if pseudo else (lambda t: t)
 
     payload = {
         "stats": stats,
@@ -95,14 +101,13 @@ def summarize_findings(stats: dict, findings: list[dict]) -> dict:
     try:
         response = _client.chat.completions.create(
             model=MODEL,
-            temperature=0,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SUMMARY_PROMPT},
-                {"role": "user", "content": json.dumps(payload)},
+                {"role": "user", "content": scrub(json.dumps(payload))},
             ],
         )
-        data = json.loads(response.choices[0].message.content)
+        data = json.loads(unscrub(response.choices[0].message.content))
     except Exception as exc:
         log.warning("summary generation failed: %s", exc)
         return _fallback_summary(findings)
@@ -136,8 +141,20 @@ Useful lines of enquiry, depending on the finding:
 - Was the activity outside working hours?
 - Did the host contact anything else unusual around the same time?
 
-Finish with a short plain-text assessment: what the logs show, whether this looks
-malicious, and the single most useful next step."""
+Write the final answer as a SOC handoff note, not prose. Exact format:
+
+ASSESSMENT: benign | suspicious | malicious | inconclusive - one clause of why.
+Hedge honestly ("likely", "possibly") when the evidence is not conclusive;
+logs alone rarely prove intent.
+EVIDENCE:
+- one fact per line, telegraphic fragments, numbers first (counts, bytes, times)
+- 3 to 6 lines
+GAPS:
+- what the logs could not establish (omit the section if nothing)
+NEXT: the single most useful action, one line
+
+Under 120 words total. No filler, no restating the finding, no hedging
+sentences. Facts only."""
 
 
 TYPE_MAP = {str: "string", int: "integer", float: "number", bool: "boolean"}
@@ -173,19 +190,24 @@ def build_tool_schema(fn) -> dict:
     return {"type": "function", "function": {"name": fn.__name__, "description": inspect.getdoc(fn), "parameters": {"type": "object", "properties": properties, "required": required}}}
 
 
-def investigate_finding(finding: dict, registry: dict) -> dict:
+def investigate_finding(finding: dict, registry: dict, pseudo=None) -> dict:
     if not enabled():
         return {"assessment": "AI investigation unavailable (no API key configured).",
                 "steps": 0, "generated_by": "fallback"}
 
+    # Pseudonymization happens at the wire: everything sent is scrubbed,
+    # everything received is unscrubbed. Tools and the loop see real values.
+    scrub = pseudo.scrub if pseudo else (lambda t: t)
+    unscrub = pseudo.unscrub if pseudo else (lambda t: t)
+
     messages = [
         {"role": "system", "content": INVESTIGATE_PROMPT},
-        {"role": "user", "content": json.dumps({
+        {"role": "user", "content": scrub(json.dumps({
             "finding": {k: finding[k] for k in
                         ("detector", "entity", "reason", "confidence", "mitre",
                          "first_seen", "last_seen") if k in finding},
             "suggested_filter": finding.get("filter", {}),
-        })},
+        }))},
     ]
     
     tools = [build_tool_schema(fn) for fn in registry.values()]
@@ -193,28 +215,35 @@ def investigate_finding(finding: dict, registry: dict) -> dict:
     #AGENT LOOP:
     steps = 0
     tokens = 0
+    # Every tool call is recorded for the UI's "show the agent's work" panel:
+    # real values (the analyst's view), not the aliases sent to the model.
+    trace = []
     for _ in range(MAX_AGENT_STEPS):
         response = _client.chat.completions.create(
-            model=MODEL, temperature=0, messages=messages, tools=tools
+            model=MODEL, messages=messages, tools=tools
         )
         tokens += response.usage.total_tokens
         message = response.choices[0].message
         if not message.tool_calls:
-            return {"assessment": message.content, "steps": steps,
-                    "tokens": tokens, "generated_by": MODEL}
+            return {"assessment": unscrub(message.content), "steps": steps,
+                    "tokens": tokens, "trace": trace, "generated_by": MODEL}
         messages.append(message)
         for call in message.tool_calls:
-            args = json.loads(call.function.arguments)
+            args = json.loads(unscrub(call.function.arguments))
             fn = registry.get(call.function.name)
             try:
                 result = fn(**args) if fn else {"error": "unknown tool"}
             except Exception as exc:
                 result = {"error": str(exc)}
-            messages.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result, default=str)})
+            trace.append({"tool": call.function.name, "arguments": args,
+                          "result": result})
+            messages.append({"role": "tool", "tool_call_id": call.id,
+                             "content": scrub(json.dumps(result, default=str))})
         steps += 1
     #Last call with tools disabled so model conclude with gathered information:
     response = _client.chat.completions.create(
-        model=MODEL, temperature=0, messages=messages, tools=tools, tool_choice="none"
+        model=MODEL, messages=messages, tools=tools, tool_choice="none"
     )
-    return {"assessment": response.choices[0].message.content,
-            "steps": steps, "generated_by": MODEL}
+    tokens += response.usage.total_tokens
+    return {"assessment": unscrub(response.choices[0].message.content),
+            "steps": steps, "tokens": tokens, "trace": trace, "generated_by": MODEL}
