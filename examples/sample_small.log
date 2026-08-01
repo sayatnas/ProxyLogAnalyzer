@@ -1,0 +1,12 @@
+timestamp,user,src_ip,domain,action,category,bytes_sent,bytes_received,status
+2026-07-31T09:00:05,alice,10.0.1.4,news-site.com,ALLOWED,news,420,20480,200
+2026-07-31T09:01:12,bob,10.0.1.7,code-forge.dev,ALLOWED,dev-tools,640,30100,200
+2026-07-31T09:02:33,alice,10.0.1.4,ad-tracker.biz,BLOCKED,ads,150,0,403
+CORRUPTED LINE ### sensor glitch
+2026-07-31T09:03:41,carol,10.0.1.9,file-drop.io,ALLOWED,cloud-storage,921600,1200,200
+2026-07-31T09:04:02,bob,10.0.1.7,malware-c2.xyz,BLOCKED,malware,180,0,403
+2026-07-31T09:05:55,alice,10.0.1.4,mail-box.com,ALLOWED,email,720,9400,200
+2026-07-31T09:06:14,carol,10.0.1.9,video-stream.tv,ALLOWED,streaming,330,380000,200
+2026-07-31T09:07:00,bob,10.0.1.7,social-hub.net,ALLOWED,social,290,9900,200
+2026-07-31T09:08:21,alice,10.0.1.4,wiki-pedia.org,ALLOWED,reference,380,15200,notanumber
+2026-07-31T09:09:47,carol,10.0.1.9,news-site.com,ALLOWED,news,470,19900,200

@@ -1,0 +1,41 @@
+{
+  "seed": 42,
+  "total_good_lines": 7595,
+  "malformed_lines": 3,
+  "planted": {
+    "rate_spike": {
+      "src_ip": "10.0.1.11",
+      "user": "dave",
+      "domain": "crypto-miner.xyz",
+      "window": "10:30-10:33",
+      "requests": 150
+    },
+    "beaconing": {
+      "src_ip": "10.0.1.99",
+      "user": "svc-backup",
+      "domain": "sync-cdn.net",
+      "interval_seconds": 60,
+      "jitter_seconds": 3,
+      "events": 1441
+    },
+    "exfiltration": {
+      "user": "eve",
+      "domain": "file-drop.io",
+      "bytes_sent": [
+        52428800,
+        61000000,
+        78643200
+      ],
+      "total_bytes": 192072000
+    },
+    "blocked_burst": {
+      "user": "mallory",
+      "blocked_ratio_approx": 0.65
+    },
+    "rare_destination": {
+      "domain": "xj9-relay.top",
+      "user": "carol",
+      "time": "2026-07-30T03:12:00"
+    }
+  }
+}

@@ -16,8 +16,10 @@ from statistics import mean, median, stdev
 Z_THRESHOLD = 5.0
 MIN_REQUESTS_PER_MINUTE = 10  
 
-BEACON_CV_MAX = 0.15           
-MIN_BEACON_EVENTS = 6         
+BEACON_CV_MAX = 0.15
+MIN_BEACON_EVENTS = 6
+
+MIN_EXFIL_BYTES = 10_000_000
 
 MAD_SCALE = 0.6745
 
@@ -80,6 +82,7 @@ def detect_rate_spike(records: list[dict]) -> list[dict]:
     return findings
 
 def detect_beaconing(records: list[dict]) -> list[dict]:
+    findings = []
     pairs = defaultdict(list)
     for record in records:
         pairs[(record["src_ip"], record["domain"])].append(record["ts"])
@@ -105,7 +108,35 @@ def detect_beaconing(records: list[dict]) -> list[dict]:
             })
     return findings
 
-DETECTORS = [detect_rate_spike, detect_beaconing]
+def detect_exfiltration(records: list[dict]) -> list[dict]:
+    findings = []
+    bytes_sent = defaultdict(int)
+    for record in records:
+        bytes_sent[record["src_ip"]] += record["bytes_sent"]
+    baseline, spread, method = robust_scores(list(bytes_sent.values()))
+    if spread == 0:
+        return findings
+    for ip, total in bytes_sent.items():
+        if total < MIN_EXFIL_BYTES:
+            continue
+        z = (total - baseline) / spread
+        if z > Z_THRESHOLD:
+            findings.append({
+                "detector": "exfiltration",
+                "entity": ip,
+                "mitre": "T1048",
+                "confidence": confidence_from_z(z),
+                "reason": f"{total / 1_000_000:.1f} MB uploaded (typical: {baseline / 1_000_000:.1f} MB)",
+                "evidence": {
+                    "bytes_sent": total,
+                    "z": round(z, 1),
+                    "baseline_method": method,
+                },
+            })
+    return findings
+
+
+DETECTORS = [detect_rate_spike, detect_beaconing, detect_exfiltration]
 
 
 if __name__ == "__main__":
