@@ -14,8 +14,8 @@ TOKEN_HOURS = 8
 
 log = logging.getLogger(__name__)
 
-# Single demo account, provisioned from the environment. A production build
-# would store accounts in a database with real provisioning.
+# Single demo account, provisioned from environment.
+# For production, store accounts in a database with real provisioning.
 USERS: dict[str, str] = {}
 
 

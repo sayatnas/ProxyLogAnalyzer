@@ -10,7 +10,13 @@ Built for the TENEX take-home exercise.
 
 - React + TypeScript (Vite)
 - Flask
-- PostgreSQL
+- JWT auth (PyJWT), scrypt password hashing
+
+Analyses are held in memory keyed by upload id and scoped to the user who
+uploaded them; the uploaded file on disk is the durable copy. No database:
+the finding shape was still changing during the build, and a schema would have
+been friction without buying anything a prototype needs. Findings and events
+would go to Postgres in a real build, with raw logs staying on object storage.
 
 ## Running locally
 
