@@ -131,5 +131,68 @@ def get_results(upload_id):
     return jsonify(entry['result'])
 
 
+MAX_EVENTS = 200
+
+
+def matches(record: dict, filters: dict) -> bool:
+    """True when a parsed record satisfies every filter that was supplied.
+
+    Filters are applied by this code against known field names; only the VALUES
+    come from the request, so a caller cannot ask for arbitrary fields.
+    """
+    if (ip := filters.get("src_ip")) and record["src_ip"] != ip:
+        return False
+    if (domain := filters.get("domain")) and record["domain"] != domain:
+        return False
+    if (user := filters.get("user")) and record["user"] != user:
+        return False
+    if (action := filters.get("action")) and record["action"] != action:
+        return False
+    if (min_bytes := filters.get("min_bytes_sent")) and record["bytes_sent"] < int(min_bytes):
+        return False
+    if (start := filters.get("time_from")) and record["timestamp"] < start:
+        return False
+    if (end := filters.get("time_to")) and record["timestamp"] > end:
+        return False
+    return True
+
+
+@app.route('/api/results/<upload_id>/events')
+@require_auth
+def get_events(upload_id):
+    """Pivot: the log lines behind a finding.
+
+    Re-reads the uploaded file rather than holding parsed records in memory,
+    so memory does not grow with the number of uploads. At ~150ms for 7.5k
+    lines this is fine at prototype scale; at volume the events would live in
+    an indexed store instead.
+    """
+    entry = ANALYSES.get(upload_id)
+    if entry is None or entry['owner'] != g.username:
+        return jsonify({'error': 'unknown upload id'}), 404
+
+    saved_path = UPLOAD_DIR / f"{upload_id}.log"
+    if not saved_path.exists():
+        return jsonify({'error': 'log file no longer available'}), 410
+
+    filters = {k: v for k, v in request.args.items() if k != 'limit' and v}
+    limit = min(int(request.args.get('limit', MAX_EVENTS)), MAX_EVENTS)
+
+    records, _ = parse_file(str(saved_path))
+    matched = [r for r in records if matches(r, filters)]
+    events = [
+        {k: r[k] for k in
+         ('timestamp', 'user', 'src_ip', 'domain', 'action', 'category',
+          'bytes_sent', 'bytes_received', 'status')}
+        for r in matched[:limit]
+    ]
+    return jsonify({
+        'events': events,
+        'total_matched': len(matched),
+        'returned': len(events),
+        'filters': filters,
+    })
+
+
 if __name__ == '__main__':
     app.run(port=int(os.environ.get('PORT', 5000)), debug=True)

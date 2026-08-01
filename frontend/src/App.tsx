@@ -64,7 +64,7 @@ function App() {
         <>
           <StatsBar stats={result.stats} />
           <Timeline events={result.timeline} />
-          <FindingsTable findings={result.findings} />
+          <FindingsTable findings={result.findings} uploadId={result.upload_id} />
         </>
       )}
     </div>

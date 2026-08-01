@@ -11,6 +11,7 @@ Finding is a dict with a fixed shape shared by all detectors:
     }
 """
 from collections import defaultdict
+from datetime import timedelta
 from statistics import mean, median, stdev
 
 Z_THRESHOLD = 5.0
@@ -85,6 +86,12 @@ def detect_rate_spike(records: list[dict]) -> list[dict]:
             },
             "first_seen": data["minute"].isoformat(),
             "last_seen": data["minute"].isoformat(),
+            "filter": {
+                "src_ip": ip,
+                "time_from": data["minute"].isoformat(),
+                "time_to": (data["minute"] + timedelta(minutes=1)).isoformat(),
+            },
+            "entity_filter": {"src_ip": ip},
         })
     return findings
 
@@ -114,6 +121,11 @@ def detect_beaconing(records: list[dict]) -> list[dict]:
                 },
                 "first_seen": timestamps[0].isoformat(),
                 "last_seen": timestamps[-1].isoformat(),
+                "filter": {
+                    "src_ip": ip,
+                    "domain": domain
+                },
+                "entity_filter": {"src_ip": ip},
             })
     return findings
 
@@ -153,6 +165,11 @@ def detect_exfiltration(records: list[dict]) -> list[dict]:
                 },
                 "first_seen": first[ip].isoformat(),
                 "last_seen": last[ip].isoformat(),
+                "filter": {
+                    "src_ip": ip,
+                    "min_bytes_sent": LARGE_UPLOAD_BYTES,
+                },
+                "entity_filter": {"src_ip": ip},
             })
     return findings
 

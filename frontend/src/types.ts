@@ -1,5 +1,17 @@
 // TypeScript mirror of the backend's JSON contract (see app.py upload()).
 
+export interface LogEvent {
+  timestamp: string;
+  user: string;
+  src_ip: string;
+  domain: string;
+  action: string;
+  category: string;
+  bytes_sent: number;
+  bytes_received: number;
+  status: number;
+}
+
 export interface Finding {
   detector: string;
   entity: string;
@@ -7,6 +19,8 @@ export interface Finding {
   confidence: number;
   reason: string;
   evidence: Record<string, unknown>;
+  filter: Record<string, string | number>;
+  entity_filter: Record<string, string | number>;
   first_seen: string;
   last_seen?: string;
 }
