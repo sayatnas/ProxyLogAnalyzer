@@ -1,8 +1,10 @@
 """AI layer.
 
-  summarize_findings()  one call, no tools, runs automatically on upload
-  investigate_finding() bounded tool loop, runs when an analyst asks
+  triage_findings()     tool-augmented triage of all findings, on demand
+  investigate_finding() bounded tool loop over one finding, on demand
 
+Both are bounded agent loops over the same read-only tool registry; the
+statistics decide what is anomalous, the model verifies, ranks, and explains.
 """
 import inspect
 import json
@@ -27,28 +29,33 @@ def enabled() -> bool:
     return _client is not None
 
 
-# Layer 1: summary
+# Layer 1: triage
 
-SUMMARY_PROMPT = """You are assisting a SOC analyst triaging one proxy log file.
-You are given pre-computed statistical findings. Write a triage summary.
+TRIAGE_PROMPT = """You are triaging one proxy log file for a SOC analyst.
+You are given pre-computed statistical findings, and tools that read the log.
+
+Before ranking anything, VERIFY: profile each flagged entity and its main
+destination domains with the tools. A finding's severity depends on context
+the statistics cannot see (a spike to a malware-category domain outranks a
+bigger spike to a CDN). Do not rank on the finding text alone. Then check
+whether findings share entities, domains, or time windows.
 
 Rules:
-- Use ONLY the findings provided. Never invent IP addresses, domains, users,
-  times or numbers that do not appear in the input.
-- Refer to entities exactly as given.
+- Base every statement on the findings or on tool results. Never invent
+  entities or numbers.
 - Do not speculate about attacker identity or attribution.
-- If the findings do not support a judgement, use "inconclusive".
-- Recommended actions must be investigative steps an analyst can take today.
-- Write for a SOC analyst mid-shift: telegraphic fragments, entity and numbers
-  first, no filler words. "10.0.1.11: 60 req/min at 10:30, baseline 1.5" not
-  "The host 10.0.1.11 generated a large number of requests".
+- If the evidence does not support a judgement, use "inconclusive".
+- Telegraphic fragments, entity and numbers first, no filler words.
+- The analyst already sees the stats block, the findings table, and a
+  timeline of the findings. Do not restate them. Your value is judgement:
+  which finding matters most and why, what the tools revealed that the
+  detectors could not see, how findings relate, and what to do.
 
-Return ONLY JSON matching:
+When done investigating, return ONLY JSON matching:
 {
   "assessment": "benign" | "suspicious" | "malicious" | "inconclusive",
-  "summary": "1-2 tight sentences: what happened, worst first",
-  "key_observations": ["one fact each, entity first, fragment style"],
-  "correlations": ["entities appearing in multiple findings, or a note that none do"],
+  "summary": "2-3 tight sentences: worst finding first and why it outranks the others, citing what tool evidence changed or confirmed the ranking",
+  "correlations": ["ONLY links you verified: an entity in multiple findings, a shared domain, an overlapping time window; empty list if none"],
   "recommended_actions": ["imperative fragments, most urgent first"]
 }"""
 
@@ -65,7 +72,6 @@ def _fallback_summary(findings: list[dict]) -> dict:
         return {
             "assessment": "benign",
             "summary": "No anomalies were detected in this log.",
-            "key_observations": [],
             "correlations": [],
             "recommended_actions": [],
             "generated_by": "fallback",
@@ -75,14 +81,21 @@ def _fallback_summary(findings: list[dict]) -> dict:
         "assessment": "suspicious" if high else "inconclusive",
         "summary": (f"{len(findings)} anomalies detected, {len(high)} at high confidence. "
                     "AI summary unavailable; findings below are unaffected."),
-        "key_observations": [f"{f['entity']}: {f['reason']}" for f in findings[:5]],
         "correlations": [],
         "recommended_actions": ["Review each finding and pivot into its supporting events."],
         "generated_by": "fallback",
     }
 
 
-def summarize_findings(stats: dict, findings: list[dict], pseudo=None) -> dict:
+def triage_findings(stats: dict, findings: list[dict], registry: dict,
+                    pseudo=None) -> dict:
+    """Tool-augmented triage of a whole log's findings.
+
+    Same output contract as the old narration-only summary, but the model may
+    use the read-only tools to verify context (domain categories, host
+    behaviour) before ranking, so severity reflects what the statistics
+    cannot see.
+    """
     if not enabled():
         return _fallback_summary(findings)
 
@@ -97,28 +110,62 @@ def summarize_findings(stats: dict, findings: list[dict], pseudo=None) -> dict:
             for f in findings
         ],
     }
+    messages = [
+        {"role": "system", "content": TRIAGE_PROMPT},
+        {"role": "user", "content": scrub(json.dumps(payload))},
+    ]
+    tools = [build_tool_schema(fn) for fn in registry.values()]
+
+    steps = 0
+    tokens = 0
+    trace = []
+
+    def finish(content) -> dict:
+        """Parse and validate the model's final JSON; fall back if bad."""
+        try:
+            data = json.loads(unscrub(content))
+        except (TypeError, json.JSONDecodeError) as exc:
+            log.warning("triage returned invalid JSON: %s", exc)
+            return _fallback_summary(findings)
+        if data.get("assessment") not in ASSESSMENTS or not data.get("summary"):
+            log.warning("triage failed validation: %s", data)
+            return _fallback_summary(findings)
+        data.update({"generated_by": MODEL, "steps": steps,
+                     "tokens": tokens, "trace": trace})
+        return data
 
     try:
+        for _ in range(MAX_AGENT_STEPS):
+            response = _client.chat.completions.create(
+                model=MODEL, messages=messages, tools=tools,
+                response_format={"type": "json_object"},
+            )
+            tokens += response.usage.total_tokens
+            message = response.choices[0].message
+            if not message.tool_calls:
+                return finish(message.content)
+            messages.append(message)
+            for call in message.tool_calls:
+                args = json.loads(unscrub(call.function.arguments))
+                fn = registry.get(call.function.name)
+                try:
+                    result = fn(**args) if fn else {"error": "unknown tool"}
+                except Exception as exc:
+                    result = {"error": str(exc)}
+                trace.append({"tool": call.function.name, "arguments": args,
+                              "result": result})
+                messages.append({"role": "tool", "tool_call_id": call.id,
+                                 "content": scrub(json.dumps(result, default=str))})
+            steps += 1
         response = _client.chat.completions.create(
-            model=MODEL,
+            model=MODEL, messages=messages, tools=tools, tool_choice="none",
             response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": SUMMARY_PROMPT},
-                {"role": "user", "content": scrub(json.dumps(payload))},
-            ],
         )
-        data = json.loads(unscrub(response.choices[0].message.content))
+        tokens += response.usage.total_tokens
+        return finish(response.choices[0].message.content)
     except Exception as exc:
-        log.warning("summary generation failed: %s", exc)
+        log.warning("triage loop failed: %s", exc)
         return _fallback_summary(findings)
-
-    # Never trust the output: validate before it reaches the UI.
-    if data.get("assessment") not in ASSESSMENTS or not data.get("summary"):
-        log.warning("summary failed validation: %s", data)
-        return _fallback_summary(findings)
-
-    data["generated_by"] = MODEL
-    return data
 
 
 # Layer 2: investigation agent

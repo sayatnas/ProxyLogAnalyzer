@@ -41,13 +41,17 @@ def build_registry(records: list[dict]) -> dict:
     def query_events(src_ip: str | None = None, domain: str | None = None,
                      user: str | None = None,
                      action: Literal["ALLOWED", "BLOCKED"] | None = None,
+                     time_from: str | None = None, time_to: str | None = None,
                      limit: int = 30):
         """Fetch raw proxy log lines from this upload. Filter by source IP,
-        domain, user, or action (ALLOWED/BLOCKED). Use this to see the
-        evidence behind the finding, or to see what else a host did."""
+        domain, user, action (ALLOWED/BLOCKED), or a time window using
+        timestamps exactly like "2026-07-30T10:30:00" (time_from inclusive,
+        time_to exclusive). Use this to see the evidence behind the finding,
+        to see what else a host did, or to zoom into a specific minute."""
         filters = {k: v for k, v in
                    {"src_ip": src_ip, "domain": domain,
-                    "user": user, "action": action}.items() if v}
+                    "user": user, "action": action,
+                    "time_from": time_from, "time_to": time_to}.items() if v}
         capped = min(int(limit), 50)
         matched = [r for r in records if matches(r, filters)]
         return {

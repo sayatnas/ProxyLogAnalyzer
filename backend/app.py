@@ -157,8 +157,8 @@ def generate_summary(upload_id):
         return jsonify({'error': 'log file no longer available'}), 410
     records, _ = parse_file(str(saved_path))
 
-    summary = llm.summarize_findings(result['stats'], result['findings'],
-                                     Pseudonymizer(records))
+    summary = llm.triage_findings(result['stats'], result['findings'],
+                                  build_registry(records), Pseudonymizer(records))
     result['summary'] = summary
     return jsonify(summary)
 
