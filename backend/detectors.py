@@ -13,11 +13,12 @@ Finding is a dict with a fixed shape shared by all detectors:
 from collections import defaultdict
 from statistics import mean, median, stdev
 
-# Tuning lives here rather than inline, so thresholds are config, not code.
 Z_THRESHOLD = 5.0
-MIN_REQUESTS_PER_MINUTE = 10   # absolute floor: 6 requests/min is never interesting
+MIN_REQUESTS_PER_MINUTE = 10  
 
-# Scales MAD so a MAD-based score is comparable to an ordinary z-score.
+BEACON_CV_MAX = 0.15           
+MIN_BEACON_EVENTS = 6         
+
 MAD_SCALE = 0.6745
 
 
@@ -78,7 +79,33 @@ def detect_rate_spike(records: list[dict]) -> list[dict]:
         })
     return findings
 
-DETECTORS = [detect_rate_spike]
+def detect_beaconing(records: list[dict]) -> list[dict]:
+    pairs = defaultdict(list)
+    for record in records:
+        pairs[(record["src_ip"], record["domain"])].append(record["ts"])
+    for (ip, domain), timestamps in pairs.items():
+        if len(timestamps) < MIN_BEACON_EVENTS:
+            continue
+        timestamps = sorted(timestamps)
+        gaps = [(timestamps[i] - timestamps[i-1]).total_seconds() for i in range(1, len(timestamps))]
+        mean_gap = mean(gaps)
+        cv = (stdev(gaps) / mean_gap) if mean_gap > 0 else 0
+        if cv < BEACON_CV_MAX:
+            findings.append({
+                "detector": "beaconing",
+                "entity": f"{ip} -> {domain}",
+                "mitre": "T1071",
+                "confidence": 1 - cv / BEACON_CV_MAX,
+                "reason": f"{len(timestamps)} requests to {domain} every ~{mean_gap:.1f}s (variation: {cv:.1%})",
+                "evidence": {
+                    "events": len(timestamps),
+                    "mean_gap_seconds": mean_gap,
+                    "cv": cv,
+                },
+            })
+    return findings
+
+DETECTORS = [detect_rate_spike, detect_beaconing]
 
 
 if __name__ == "__main__":
