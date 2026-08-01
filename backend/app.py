@@ -58,33 +58,7 @@ def summarize(records: list[dict], skipped: int) -> dict:
 def severity_from_confidence(confidence: float) -> str:
     return "high" if confidence > 0.9 else "medium" if confidence > 0.5 else "low"
 
-def build_timeline(records: list[dict], findings: list[dict]) -> list[dict]:
-    # TODO(you): turn findings into a chronological narrative of the day.
-    #
-    # A list sorted by confidence answers "what is worst?". A timeline answers
-    # "what happened, and in what order?" Analysts need both: sequence reveals
-    # co-occurrence, and things that happen together are often one incident.
-    #
-    # Return a list of events sorted by time, each:
-    #   {"time": iso string, "severity": "high"|"medium"|"low",
-    #    "detector": ..., "entity": ..., "description": "..."}
-    #
-    # Getting the time for each finding is the interesting part, because each
-    # detector stores time differently in its evidence:
-    #   - rate_spike: evidence["minute"] is already an iso string
-    #   - beaconing: no timestamp in evidence at all. You need the FIRST
-    #     occurrence: scan records for that ip+domain pair and take min(ts).
-    #     (Or add a "first_seen" field to the beaconing finding: cleaner,
-    #     and a reasonable change to make now.)
-    #   - exfiltration: no timestamp either. Same approach: earliest large
-    #     upload by that entity.
-    #
-    # This mismatch is worth noticing: the finding shape we designed has no
-    # standard time field, and the timeline needs one. Adding "first_seen"
-    # (and maybe "last_seen") to EVERY finding is the better fix, and it is
-    # the kind of schema change you make once you see how data gets consumed.
-    #
-    # severity: map from confidence. Your thresholds, your call.
+def build_timeline(records: list[dict], findings: list[dict]) -> list[dict]:D
     timeline = []
 
     for f in findings:
