@@ -20,6 +20,11 @@ BEACON_CV_MAX = 0.15
 MIN_BEACON_EVENTS = 6
 
 MIN_EXFIL_BYTES = 10_000_000
+LARGE_UPLOAD_BYTES = 1_000_000 # 1 MB floor
+
+BLOCKED_RATIO_MAX = 0.30
+MIN_REQUESTS_FOR_RATIO = 20
+RARE_DOMAIN_MAX_HITS = 2
 
 MAD_SCALE = 0.6745
 
@@ -40,7 +45,7 @@ def robust_scores(values: list[float]) -> tuple[float, float, str]:
 
 
 def confidence_from_z(z: float) -> float:
-    return min(1.0, z / 10)
+    return round(min(1.0, z / 10), 2)
 
 
 def detect_rate_spike(records: list[dict]) -> list[dict]:
@@ -78,6 +83,8 @@ def detect_rate_spike(records: list[dict]) -> list[dict]:
                 "z": round(data["z"], 1),
                 "baseline_method": method,
             },
+            "first_seen": data["minute"].isoformat(),
+            "last_seen": data["minute"].isoformat(),
         })
     return findings
 
@@ -98,21 +105,33 @@ def detect_beaconing(records: list[dict]) -> list[dict]:
                 "detector": "beaconing",
                 "entity": f"{ip} -> {domain}",
                 "mitre": "T1071",
-                "confidence": 1 - cv / BEACON_CV_MAX,
+                "confidence": round(1 - cv / BEACON_CV_MAX, 2),
                 "reason": f"{len(timestamps)} requests to {domain} every ~{mean_gap:.1f}s (variation: {cv:.1%})",
                 "evidence": {
                     "events": len(timestamps),
-                    "mean_gap_seconds": mean_gap,
-                    "cv": cv,
+                    "mean_gap_seconds": round(mean_gap, 1),
+                    "cv": round(cv, 3),
                 },
+                "first_seen": timestamps[0].isoformat(),
+                "last_seen": timestamps[-1].isoformat(),
             })
     return findings
 
 def detect_exfiltration(records: list[dict]) -> list[dict]:
     findings = []
     bytes_sent = defaultdict(int)
+    first = {}
+    last = {}
+    large_count = defaultdict(int)
     for record in records:
-        bytes_sent[record["src_ip"]] += record["bytes_sent"]
+        ip = record["src_ip"]
+        bytes_sent[ip] += record["bytes_sent"]
+        if record["bytes_sent"] >= LARGE_UPLOAD_BYTES:
+            large_count[ip] += 1
+            if ip not in first or record["ts"] < first[ip]:
+                first[ip] = record["ts"]
+            if ip not in last or record["ts"] > last[ip]:
+                last[ip] = record["ts"]
     baseline, spread, method = robust_scores(list(bytes_sent.values()))
     if spread == 0:
         return findings
@@ -126,17 +145,33 @@ def detect_exfiltration(records: list[dict]) -> list[dict]:
                 "entity": ip,
                 "mitre": "T1048",
                 "confidence": confidence_from_z(z),
-                "reason": f"{total / 1_000_000:.1f} MB uploaded (typical: {baseline / 1_000_000:.1f} MB)",
+                "reason": f"{total / 1_000_000:.1f} MB uploaded (typical: {baseline / 1_000_000:.1f} MB) in {large_count[ip]} transfers between {first[ip].strftime('%H:%M')} and {last[ip].strftime('%H:%M')}",
                 "evidence": {
                     "bytes_sent": total,
                     "z": round(z, 1),
                     "baseline_method": method,
                 },
+                "first_seen": first[ip].isoformat(),
+                "last_seen": last[ip].isoformat(),
             })
     return findings
 
 
-DETECTORS = [detect_rate_spike, detect_beaconing, detect_exfiltration]
+def detect_blocked_burst(records: list[dict]) -> list[dict]:
+    return []
+
+
+def detect_rare_destination(records: list[dict]) -> list[dict]:
+    return []
+
+
+DETECTORS = [
+    detect_rate_spike,
+    detect_beaconing,
+    detect_exfiltration,
+    detect_blocked_burst,
+    detect_rare_destination,
+]
 
 
 if __name__ == "__main__":
