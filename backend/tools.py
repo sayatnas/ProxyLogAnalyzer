@@ -111,8 +111,44 @@ def build_registry(records: list[dict]) -> dict:
             'active_hours': sorted({r['ts'].hour for r in hits}),
         }
 
+    def get_overview():
+        """A hunting map of the WHOLE log, aggregated for rarity rather than
+        volume: domains contacted by the fewest distinct hosts, domains with
+        the fewest requests, domains with the highest blocked ratio, and
+        request counts per category. Rare or oddly named domains never appear
+        in top-N views, so start any sweep for unflagged activity here, then
+        drill in with the other tools."""
+        agg = {}
+        categories = Counter()
+        for r in records:
+            a = agg.setdefault(r['domain'], {"hits": 0, "ips": set(),
+                                             "blocked": 0,
+                                             "category": r['category']})
+            a["hits"] += 1
+            a["ips"].add(r['src_ip'])
+            if r['action'] == 'BLOCKED':
+                a["blocked"] += 1
+            categories[r['category']] += 1
+        rows = [
+            {"domain": d, "category": a["category"], "hits": a["hits"],
+             "distinct_hosts": len(a["ips"]),
+             "blocked_ratio": round(a["blocked"] / a["hits"], 3)}
+            for d, a in agg.items()
+        ]
+        return {
+            "fewest_host_domains":
+                sorted(rows, key=lambda x: (x["distinct_hosts"], x["hits"]))[:10],
+            "least_contacted_domains":
+                sorted(rows, key=lambda x: x["hits"])[:10],
+            "highest_blocked_domains":
+                sorted([x for x in rows if x["hits"] >= 5],
+                       key=lambda x: x["blocked_ratio"], reverse=True)[:10],
+            "category_counts": dict(categories),
+        }
+
     return {
         'query_events': query_events,
         'get_domain_profile': get_domain_profile,
         'get_entity_profile': get_entity_profile,
+        'get_overview': get_overview,
     }

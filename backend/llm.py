@@ -34,11 +34,20 @@ def enabled() -> bool:
 TRIAGE_PROMPT = """You are triaging one proxy log file for a SOC analyst.
 You are given pre-computed statistical findings, and tools that read the log.
 
-Before ranking anything, VERIFY: profile each flagged entity and its main
+Work in two phases.
+
+Phase 1, VERIFY AND RANK: profile each flagged entity and its main
 destination domains with the tools. A finding's severity depends on context
 the statistics cannot see (a spike to a malware-category domain outranks a
 bigger spike to a CDN). Do not rank on the finding text alone. Then check
 whether findings share entities, domains, or time windows.
+
+Phase 2, SWEEP: call get_overview and look for suspicious activity NOT
+covered by any finding: domains contacted by few hosts, names imitating
+brands or services (typosquats), odd category mixes, quiet traffic to
+uncategorized destinations. The detectors only catch statistical outliers;
+your job here is what needs judgement. Verify anything promising with the
+other tools before reporting it. Report these as leads, never as findings.
 
 Rules:
 - Base every statement on the findings or on tool results. Never invent
@@ -55,9 +64,16 @@ When done investigating, return ONLY JSON matching:
 {
   "assessment": "benign" | "suspicious" | "malicious" | "inconclusive",
   "summary": "2-3 tight sentences: worst finding first and why it outranks the others, citing what tool evidence changed or confirmed the ranking",
-  "correlations": ["ONLY links you verified: an entity in multiple findings, a shared domain, an overlapping time window; empty list if none"],
-  "recommended_actions": ["imperative fragments, most urgent first"]
-}"""
+  "correlations": ["ONLY links you verified: an entity in multiple findings, a shared domain, an overlapping time window; each entry ONE sentence naming both sides; at most 3, each a DIFFERENT link; never report the absence of a link; empty list if none"],
+  "recommended_actions": ["imperative fragments, most urgent first"],
+  "leads": [{"entity": "domain or IP", "observation": "what you saw, with numbers", "why_suspicious": "the judgement, one fragment", "confidence": 0.55, "filter": {"domain": "..."}}]
+}
+Leads are hypotheses for a human to verify, not detections: include only what
+you checked with tools, give honest sub-certain confidence values, and use
+an empty list when the sweep found nothing. Never report an entity or domain
+that already appears in a finding as a lead; leads exist only for what the
+findings do not cover. The filter object may use keys src_ip, domain, user,
+time_from, time_to."""
 
 ASSESSMENTS = {"benign", "suspicious", "malicious", "inconclusive"}
 
@@ -74,6 +90,7 @@ def _fallback_summary(findings: list[dict]) -> dict:
             "summary": "No anomalies were detected in this log.",
             "correlations": [],
             "recommended_actions": [],
+            "leads": [],
             "generated_by": "fallback",
         }
     high = [f for f in findings if f["confidence"] >= 0.8]
@@ -83,6 +100,7 @@ def _fallback_summary(findings: list[dict]) -> dict:
                     "AI summary unavailable; findings below are unaffected."),
         "correlations": [],
         "recommended_actions": ["Review each finding and pivot into its supporting events."],
+        "leads": [],
         "generated_by": "fallback",
     }
 
@@ -130,6 +148,34 @@ def triage_findings(stats: dict, findings: list[dict], registry: dict,
         if data.get("assessment") not in ASSESSMENTS or not data.get("summary"):
             log.warning("triage failed validation: %s", data)
             return _fallback_summary(findings)
+        # A lead the UI can render needs entity and why_suspicious; drop
+        # anything malformed rather than trusting the prompt was followed.
+        # Leads must also not duplicate a finding: the sweep exists for what
+        # the detectors did NOT flag. Exact match against the findings'
+        # atomic identifiers, not substring: a lead that merely mentions a
+        # flagged host alongside a new domain must survive, because hiding a
+        # real lead is worse than showing a duplicate.
+        flagged = set()
+        for f in findings:
+            flagged.update(f.get("entity", "").replace("->", " ").split())
+        leads = data.get("leads")
+        cleaned = []
+        if isinstance(leads, list):
+            for lead in leads:
+                if not (isinstance(lead, dict)
+                        and isinstance(lead.get("entity"), str) and lead["entity"]
+                        and isinstance(lead.get("why_suspicious"), str)
+                        and lead["why_suspicious"]):
+                    continue
+                if lead["entity"].strip() in flagged:
+                    continue
+                cleaned.append(lead)
+        # Strongest first, so if the cap ever truncates it drops the weakest
+        # leads, not whichever the model happened to list last.
+        cleaned.sort(key=lambda l: l.get("confidence") or 0, reverse=True)
+        data["leads"] = cleaned[:5]
+        correlations = data.get("correlations")
+        data["correlations"] = correlations[:3] if isinstance(correlations, list) else []
         data.update({"generated_by": MODEL, "steps": steps,
                      "tokens": tokens, "trace": trace})
         return data

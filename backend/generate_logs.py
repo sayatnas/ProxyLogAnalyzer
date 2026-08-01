@@ -79,6 +79,16 @@ def generate(seed: int, normal_requests: int):
     rare_ts = DAY + timedelta(hours=3, minutes=12)
     rows.append(line(rare_ts, "carol", "10.0.1.9", "xj9-relay.top", "ALLOWED", 840, 12000))
 
+    # --- planted: hunt-only (brand-imitating typosquat, three quiet hits;
+    #     evades every statistical shape: too few requests for a rate spike,
+    #     tiny bytes, no periodicity, never blocked, and one hit more than a
+    #     rare-destination threshold of 2. Only the domain NAME is evidence,
+    #     so nothing but semantic judgement can flag it) ---
+    for td in (timedelta(hours=9, minutes=41), timedelta(hours=11, minutes=7),
+               timedelta(hours=15, minutes=33)):
+        rows.append(line(DAY + td, "grace", "10.0.1.13", "micr0soft-login.com",
+                         "ALLOWED", 1900, 3400))
+
     rows.sort(key=lambda r: r[0])
     out_lines = [HEADER] + [r[1] for r in rows]
 
@@ -102,6 +112,9 @@ def generate(seed: int, normal_requests: int):
             "blocked_burst": {"user": "mallory", "blocked_ratio_approx": 0.65},
             "rare_destination": {"domain": "xj9-relay.top", "user": "carol",
                                  "time": rare_ts.isoformat()},
+            "hunt_only": {"domain": "micr0soft-login.com", "user": "grace",
+                          "src_ip": "10.0.1.13", "hits": 3,
+                          "why": "typosquat name; statistically invisible"},
         },
     }
     return out_lines, truth
