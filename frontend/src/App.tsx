@@ -1,19 +1,40 @@
 import { useState } from "react";
 import "./App.css";
 import type { AnalysisResult } from "./types";
+import { clearToken, getToken } from "./api";
+import LoginPage from "./components/LoginPage";
 import UploadBox from "./components/UploadBox";
 import StatsBar from "./components/StatsBar";
 import Timeline from "./components/Timeline";
 import FindingsTable from "./components/FindingsTable";
 
 function App() {
+  // Initialising from localStorage means a page refresh keeps you logged in:
+  // the token outlives React's state.
+  const [loggedIn, setLoggedIn] = useState(() => getToken() !== null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  if (!loggedIn) {
+    return <LoginPage onLoggedIn={() => setLoggedIn(true)} />;
+  }
+
   return (
     <div className="app">
-      <h1>ProxyLogAnalyzer</h1>
+      <header className="topbar">
+        <h1>ProxyLogAnalyzer</h1>
+        <button
+          className="link"
+          onClick={() => {
+            clearToken();
+            setLoggedIn(false);
+            setResult(null);
+          }}
+        >
+          Log out
+        </button>
+      </header>
       <p className="muted">Upload a proxy log to analyze it for anomalies.</p>
 
       <UploadBox
@@ -28,6 +49,10 @@ function App() {
         }}
         onError={(msg) => {
           setError(msg);
+          setLoading(false);
+        }}
+        onSessionExpired={() => {
+          setLoggedIn(false);
           setLoading(false);
         }}
       />

@@ -1,23 +1,26 @@
 import type { AnalysisResult } from "../types";
+import { authedFetch, AuthError } from "../api";
+
 
 interface Props {
   onStart: () => void;
   onSuccess: (result: AnalysisResult) => void;
   onError: (message: string) => void;
+  onSessionExpired: () => void;
 }
 
-export default function UploadBox({ onStart, onSuccess, onError }: Props) {
+export default function UploadBox({ onStart, onSuccess, onError, onSessionExpired }: Props) {
   const handleFile = (file: File) => {
     onStart();
     const form = new FormData();
     form.append("file", file);
-    fetch("http://localhost:5000/api/upload", { method: "POST", body: form })
+    authedFetch("/api/upload", { method: "POST", body: form })
       .then(async response => {
         if (!response.ok) {
           let message = response.statusText;
           try {
             const body = await response.json();
-            message = body.error;
+            if (body.error) message = body.error;
           } catch {
           }
           onError(message);
@@ -26,7 +29,13 @@ export default function UploadBox({ onStart, onSuccess, onError }: Props) {
           onSuccess(data);
         }
       })
-      .catch(error => onError(String(error)));
+      .catch(error => {
+        if (error instanceof AuthError) {
+          onSessionExpired();
+        } else {
+          onError(String(error));
+        }
+      });
   };
   return (
     <div className="upload">
