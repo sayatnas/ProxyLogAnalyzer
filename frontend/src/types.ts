@@ -1,5 +1,4 @@
 // TypeScript mirror of the backend's JSON contract (see app.py upload()).
-// If the backend response shape changes, this file must change with it.
 
 export interface Finding {
   detector: string;
