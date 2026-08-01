@@ -5,9 +5,13 @@ from pathlib import Path
 
 from flask import Flask, g, jsonify, request
 
+from dotenv import load_dotenv
+load_dotenv()
+import llm
 from auth import authenticate, create_token, ensure_demo_user, require_auth
 from detectors import DETECTORS
 from parser import parse_file
+from tools import build_registry, matches
 
 app = Flask(__name__)
 
@@ -115,6 +119,7 @@ def upload():
         'stats': summarize(records, skipped),
         'findings': findings,
         'timeline': build_timeline(records, findings),
+        'summary': llm.summarize_findings(summarize(records, skipped), findings),
     }
     ANALYSES[upload_id] = {'owner': g.username, 'result': result}
     return jsonify(result), 201
@@ -134,27 +139,33 @@ def get_results(upload_id):
 MAX_EVENTS = 200
 
 
-def matches(record: dict, filters: dict) -> bool:
-    """True when a parsed record satisfies every filter that was supplied.
+@app.route('/api/results/<upload_id>/investigate', methods=['POST'])
+@require_auth
+def investigate(upload_id):
+    """Run the investigation agent against one finding.
 
-    Filters are applied by this code against known field names; only the VALUES
-    come from the request, so a caller cannot ask for arbitrary fields.
+    On demand rather than automatic: the loop costs money and seconds, so it
+    runs when an analyst asks for it, not on every upload.
     """
-    if (ip := filters.get("src_ip")) and record["src_ip"] != ip:
-        return False
-    if (domain := filters.get("domain")) and record["domain"] != domain:
-        return False
-    if (user := filters.get("user")) and record["user"] != user:
-        return False
-    if (action := filters.get("action")) and record["action"] != action:
-        return False
-    if (min_bytes := filters.get("min_bytes_sent")) and record["bytes_sent"] < int(min_bytes):
-        return False
-    if (start := filters.get("time_from")) and record["timestamp"] < start:
-        return False
-    if (end := filters.get("time_to")) and record["timestamp"] > end:
-        return False
-    return True
+    entry = ANALYSES.get(upload_id)
+    if entry is None or entry['owner'] != g.username:
+        return jsonify({'error': 'unknown upload id'}), 404
+
+    body = request.get_json(silent=True) or {}
+    key = body.get('finding_key')
+    finding = next(
+        (f for f in entry['result']['findings'] if f['detector'] + f['entity'] == key),
+        None,
+    )
+    if finding is None:
+        return jsonify({'error': 'unknown finding'}), 404
+
+    saved_path = UPLOAD_DIR / f"{upload_id}.log"
+    if not saved_path.exists():
+        return jsonify({'error': 'log file no longer available'}), 410
+    records, _ = parse_file(str(saved_path))
+
+    return jsonify(llm.investigate_finding(finding, build_registry(records)))
 
 
 @app.route('/api/results/<upload_id>/events')

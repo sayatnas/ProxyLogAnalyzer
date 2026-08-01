@@ -1,4 +1,4 @@
-"""Authentication: password hashing, JWT issuing and verification."""
+"""Authentication: password hashing, JWT issuing, verification."""
 import logging
 import os
 from datetime import datetime, timedelta, timezone
