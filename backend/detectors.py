@@ -182,12 +182,12 @@ def detect_rare_destination(records: list[dict]) -> list[dict]:
     return []
 
 
+# The UI reports this list as "what checked your log", so it holds only
+# implemented detectors; the stubs above join it when they do something.
 DETECTORS = [
     detect_rate_spike,
     detect_beaconing,
     detect_exfiltration,
-    detect_blocked_burst,
-    detect_rare_destination,
 ]
 
 

@@ -120,6 +120,7 @@ def upload():
         'stats': summarize(records, skipped),
         'findings': findings,
         'timeline': build_timeline(records, findings),
+        'detectors': [d.__name__.removeprefix('detect_') for d in DETECTORS],
     }
     ANALYSES[upload_id] = {'owner': g.username, 'result': result}
     return jsonify(result), 201
@@ -231,4 +232,9 @@ def get_events(upload_id):
 
 
 if __name__ == '__main__':
-    app.run(port=int(os.environ.get('PORT', 5000)), debug=True)
+    # 0.0.0.0 so the app is reachable inside a container; debug only when
+    # asked for, never on a public deployment (the debugger is a code
+    # execution hole).
+    app.run(host='0.0.0.0',
+            port=int(os.environ.get('PORT', 5000)),
+            debug=os.environ.get('FLASK_DEBUG', '1') == '1')

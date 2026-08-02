@@ -63,14 +63,18 @@ Rules:
 When done investigating, return ONLY JSON matching:
 {
   "assessment": "benign" | "suspicious" | "malicious" | "inconclusive",
-  "summary": "2-3 tight sentences: worst finding first and why it outranks the others, citing what tool evidence changed or confirmed the ranking",
+  "summary": "a single string, one line per finding separated by \\n (not an array), worst first; each line: entity, then why it ranks there, citing the tool evidence that decided it; under 25 words per line",
   "correlations": ["ONLY links you verified: an entity in multiple findings, a shared domain, an overlapping time window; each entry ONE sentence naming both sides; at most 3, each a DIFFERENT link; never report the absence of a link; empty list if none"],
   "recommended_actions": ["imperative fragments, most urgent first"],
   "leads": [{"entity": "domain or IP", "observation": "what you saw, with numbers", "why_suspicious": "the judgement, one fragment", "confidence": 0.55, "filter": {"domain": "..."}}]
 }
 Leads are hypotheses for a human to verify, not detections: include only what
 you checked with tools, give honest sub-certain confidence values, and use
-an empty list when the sweep found nothing. Never report an entity or domain
+an empty list when the sweep found nothing. Rarity alone is weak evidence,
+especially in a small log where most domains are single-host; a lead needs a
+second signal on top (a deceptive name, a bad category, odd timing). If there
+are no findings, say so in the first summary line rather than ranking normal
+activity. Never report an entity or domain
 that already appears in a finding as a lead; leads exist only for what the
 findings do not cover. The filter object may use keys src_ip, domain, user,
 time_from, time_to."""
@@ -138,16 +142,39 @@ def triage_findings(stats: dict, findings: list[dict], registry: dict,
     tokens = 0
     trace = []
 
+    def unscrub_values(obj):
+        """Unscrub every string in a parsed structure. Running the regex on
+        raw JSON text misses aliases that sit right after an escape sequence
+        (in `...\\nhost-1` the escape's `n` touches `host`, so there is no
+        word boundary); parsed strings have real newlines and no escapes."""
+        if isinstance(obj, str):
+            return unscrub(obj)
+        if isinstance(obj, list):
+            return [unscrub_values(v) for v in obj]
+        if isinstance(obj, dict):
+            return {k: unscrub_values(v) for k, v in obj.items()}
+        return obj
+
     def finish(content) -> dict:
         """Parse and validate the model's final JSON; fall back if bad."""
         try:
-            data = json.loads(unscrub(content))
+            data = unscrub_values(json.loads(content))
         except (TypeError, json.JSONDecodeError) as exc:
             log.warning("triage returned invalid JSON: %s", exc)
             return _fallback_summary(findings)
+        # The model sometimes expresses "lines" as a JSON array; the UI
+        # contract is a string, so normalise before validating.
+        if isinstance(data.get("summary"), list):
+            data["summary"] = "\n".join(str(s) for s in data["summary"])
         if data.get("assessment") not in ASSESSMENTS or not data.get("summary"):
             log.warning("triage failed validation: %s", data)
             return _fallback_summary(findings)
+        # With no findings the model tends to rank normal activity as if it
+        # were findings; stamp the true provenance rather than trusting the
+        # prompt to.
+        if not findings:
+            data["summary"] = ("No detector findings; AI sweep observations only.\n"
+                               + data["summary"])
         # A lead the UI can render needs entity and why_suspicious; drop
         # anything malformed rather than trusting the prompt was followed.
         # Leads must also not duplicate a finding: the sweep exists for what
@@ -171,7 +198,11 @@ def triage_findings(stats: dict, findings: list[dict], registry: dict,
                     continue
                 cleaned.append(lead)
         # Strongest first, so if the cap ever truncates it drops the weakest
-        # leads, not whichever the model happened to list last.
+        # leads, not whichever the model happened to list last. The floor
+        # exists because rarity collapses as a signal on small logs (every
+        # domain is single-host) and the model reports the noise at honestly
+        # low confidence; observed junk sits at 0.3-0.47, real leads at 0.56+.
+        cleaned = [l for l in cleaned if (l.get("confidence") or 0) >= 0.5]
         cleaned.sort(key=lambda l: l.get("confidence") or 0, reverse=True)
         data["leads"] = cleaned[:5]
         correlations = data.get("correlations")
