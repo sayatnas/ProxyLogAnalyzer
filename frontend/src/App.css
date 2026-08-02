@@ -249,3 +249,8 @@ h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; }
 
 .ranking { margin: 0.25rem 0 0; padding-left: 1.4rem; }
 .ranking li { margin: 0.35rem 0; }
+
+.ai-title {
+  font-size: 0.95rem;
+  margin: 0.25rem 0 0.5rem;
+}

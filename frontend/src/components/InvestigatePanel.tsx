@@ -101,6 +101,7 @@ export default function InvestigatePanel({ uploadId, finding }: Props) {
 
       {result && (
         <div className="investigate-result">
+          <h3 className="ai-title">AI investigation</h3>
           {(() => {
             const note = parseNote(result.assessment);
             if (!note) {
