@@ -6,6 +6,10 @@ import type { Finding, Investigation } from "../types";
 interface Props {
   uploadId: string;
   finding: Finding;
+  // Results are cached by the parent so they survive the row being
+  // collapsed; this component is unmounted (state destroyed) on collapse.
+  cachedResult: Investigation | null;
+  onResult: (result: Investigation) => void;
 }
 
 interface ParsedNote {
@@ -50,8 +54,8 @@ function assessmentClass(assessment: string): string {
   return "";
 }
 
-export default function InvestigatePanel({ uploadId, finding }: Props) {
-  const [result, setResult] = useState<Investigation | null>(null);
+export default function InvestigatePanel({ uploadId, finding, cachedResult, onResult }: Props) {
+  const [result, setResult] = useState<Investigation | null>(cachedResult);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +71,9 @@ export default function InvestigatePanel({ uploadId, finding }: Props) {
       if (!response.ok) {
         throw new Error(`Request failed (${response.status})`);
       }
-      setResult(await response.json());
+      const data = await response.json();
+      setResult(data);
+      onResult(data);
     }
     catch (err) {
       setError(String(err));

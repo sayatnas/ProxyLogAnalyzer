@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import type { Finding } from "../types";
+import type { Finding, Investigation } from "../types";
 import EventsPanel from "./EventsPanel";
 import InvestigatePanel from "./InvestigatePanel";
 
@@ -21,6 +21,8 @@ function severityOf(confidence: number): string {
 
 export default function FindingsTable({ findings, uploadId, detectors }: Props) {
   const [openRow, setOpenRow] = useState<string | null>(null);
+  // Investigations cached here so collapsing a row does not discard them.
+  const [investigations, setInvestigations] = useState<Record<string, Investigation>>({});
   const detectorList = detectors.join(", ");
   if (findings.length === 0) {
     return (
@@ -69,7 +71,14 @@ export default function FindingsTable({ findings, uploadId, detectors }: Props) 
               {openRow === key && (
                 <tr>
                   <td colSpan={7}>
-                    <InvestigatePanel uploadId={uploadId} finding={finding} />
+                    <InvestigatePanel
+                      uploadId={uploadId}
+                      finding={finding}
+                      cachedResult={investigations[key] ?? null}
+                      onResult={(r) =>
+                        setInvestigations((prev) => ({ ...prev, [key]: r }))
+                      }
+                    />
                     <EventsPanel
                       uploadId={uploadId}
                       filter={finding.filter}
