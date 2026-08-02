@@ -5,6 +5,7 @@ import { clearToken, getToken } from "./api";
 import LoginPage from "./components/LoginPage";
 import UploadBox from "./components/UploadBox";
 import StatsBar from "./components/StatsBar";
+import ChartsPanel from "./components/ChartsPanel";
 import SummaryPanel from "./components/SummaryPanel";
 import Timeline from "./components/Timeline";
 import FindingsTable from "./components/FindingsTable";
@@ -64,6 +65,7 @@ function App() {
       {result && (
         <>
           <StatsBar stats={result.stats} />
+          <ChartsPanel charts={result.charts} />
           <SummaryPanel key={result.upload_id} uploadId={result.upload_id} />
           <Timeline events={result.timeline} />
           <FindingsTable

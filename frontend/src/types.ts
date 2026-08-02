@@ -85,4 +85,15 @@ export interface AnalysisResult {
   timeline: TimelineEvent[];
   findings: Finding[];
   detectors: string[];
+  charts: Charts;
+}
+
+export interface Charts {
+  activity: {
+    start: string;
+    end: string;
+    bucket_seconds: number;
+    counts: number[];
+  };
+  bytes_by_host: { src_ip: string; bytes: number }[];
 }

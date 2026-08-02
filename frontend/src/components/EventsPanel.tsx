@@ -2,6 +2,51 @@ import { useEffect, useState } from "react";
 import { authedFetch } from "../api";
 import type { LogEvent } from "../types";
 
+// Histogram of gaps between consecutive events. Beaconing shows as a single
+// tight spike (a robotic timer); human browsing scatters. Drawn from the
+// events already fetched, so it costs nothing extra.
+function IntervalHistogram({ events }: { events: LogEvent[] }) {
+  if (events.length < 8) return null;
+  const times = events
+    .map((e) => new Date(e.timestamp).getTime())
+    .sort((a, b) => a - b);
+  const gaps = times.slice(1).map((t, i) => (t - times[i]) / 1000);
+  const sorted = [...gaps].sort((a, b) => a - b);
+  const p95 = sorted[Math.floor(sorted.length * 0.95)] || 1;
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  const variance = gaps.reduce((a, b) => a + (b - mean) ** 2, 0) / gaps.length;
+  const cv = mean > 0 ? Math.round((Math.sqrt(variance) / mean) * 100) : 0;
+  const bins = new Array(24).fill(0);
+  for (const g of gaps) {
+    bins[Math.min(Math.floor((g / p95) * 23), 23)] += 1;
+  }
+  const max = Math.max(...bins, 1);
+  return (
+    <div className="chart intervals">
+      <h4>
+        Seconds between requests{" "}
+        <span className="muted">
+          median {Math.round(median)}s, variation {cv}%
+          {cv < 15 ? ", highly regular: timer-like" : ""}
+        </span>
+      </h4>
+      <svg viewBox="0 0 240 50" preserveAspectRatio="none">
+        {bins.map((b, i) =>
+          b > 0 ? (
+            <rect key={i} x={i * 10} y={50 - (b / max) * 50}
+                  width={9} height={(b / max) * 50} fill="#5b7fb3" />
+          ) : null
+        )}
+      </svg>
+      <div className="axis-x intervals-axis">
+        <span>0s</span>
+        <span>{Math.round(p95)}s</span>
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   uploadId: string;
   filter: Record<string, string | number>;
@@ -51,6 +96,8 @@ export default function EventsPanel({ uploadId, filter, entityFilter }: Props) {
 
       {loading && <p className="muted">Loading events&hellip;</p>}
       {error && <p className="status error">{error}</p>}
+
+      {!loading && !error && <IntervalHistogram events={events} />}
 
       {!loading && !error && events.length > 0 && (
         <table className="events-table">

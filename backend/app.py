@@ -1,5 +1,6 @@
 import os
 import uuid
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -67,6 +68,35 @@ def summarize(records: list[dict], skipped: int) -> dict:
     }
 
 
+def build_charts(records: list[dict]) -> dict:
+    """Chart data the frontend draws: request volume over time and top hosts
+    by bytes sent. Bucketing adapts to the log's span so any log gets ~120
+    bars regardless of whether it covers ten minutes or a week."""
+    times = [r["ts"] for r in records]
+    start, end = min(times), max(times)
+    span = max((end - start).total_seconds(), 1)
+    bucket_seconds = max(int(span // 120), 60)
+    counts = [0] * (int(span // bucket_seconds) + 1)
+    for r in records:
+        counts[int((r["ts"] - start).total_seconds() // bucket_seconds)] += 1
+
+    bytes_by_host = Counter()
+    for r in records:
+        bytes_by_host[r["src_ip"]] += r["bytes_sent"]
+
+    return {
+        "activity": {
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "bucket_seconds": bucket_seconds,
+            "counts": counts,
+        },
+        "bytes_by_host": [
+            {"src_ip": ip, "bytes": b} for ip, b in bytes_by_host.most_common(10)
+        ],
+    }
+
+
 def severity_from_confidence(confidence: float) -> str:
     if confidence >= 0.8:
         return "high"
@@ -121,6 +151,7 @@ def upload():
         'findings': findings,
         'timeline': build_timeline(records, findings),
         'detectors': [d.__name__.removeprefix('detect_') for d in DETECTORS],
+        'charts': build_charts(records),
     }
     ANALYSES[upload_id] = {'owner': g.username, 'result': result}
     return jsonify(result), 201

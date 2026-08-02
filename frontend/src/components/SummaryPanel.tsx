@@ -62,8 +62,8 @@ export default function SummaryPanel({ uploadId }: Props) {
     <section className="summary">
       <h2>
         AI triage summary{" "}
-        <span className={`badge ${badgeClass[summary.assessment]}`}>
-          {summary.assessment}
+        <span className={`badge ai-badge ${badgeClass[summary.assessment]}`}>
+          AI assessment: {summary.assessment}
         </span>
       </h2>
       {summary.summary.includes("\n") ? (

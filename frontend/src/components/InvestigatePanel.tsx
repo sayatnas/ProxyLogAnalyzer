@@ -117,8 +117,8 @@ export default function InvestigatePanel({ uploadId, finding, cachedResult, onRe
               <div className="investigate-note">
                 {note.assessment && (
                   <p className="inv-assessment">
-                    <span className={`badge ${assessmentClass(note.assessment)}`}>
-                      {note.assessment.split(" - ")[0]}
+                    <span className={`badge ai-badge ${assessmentClass(note.assessment)}`}>
+                      AI assessment: {note.assessment.split(" - ")[0]}
                     </span>{" "}
                     {highlight(note.assessment.split(" - ").slice(1).join(" - "))}
                   </p>
