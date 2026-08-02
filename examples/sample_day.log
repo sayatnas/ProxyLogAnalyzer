@@ -1569,6 +1569,7 @@ SENSOR GLITCH ###
 2026-07-30T09:40:39,alice,10.0.1.4,code-forge.dev,ALLOWED,dev-tools,724,11982,200
 2026-07-30T09:40:47,grace,10.0.1.13,crypto-miner.xyz,ALLOWED,malware,597,8145,200
 2026-07-30T09:40:50,grace,10.0.1.13,ad-tracker.biz,ALLOWED,ads,1839,29352,200
+2026-07-30T09:41:00,grace,10.0.1.13,micr0soft-login.com,ALLOWED,uncategorized,1900,3400,200
 2026-07-30T09:41:12,heidi,10.0.1.14,file-drop.io,ALLOWED,cloud-storage,489,10896,200
 2026-07-30T09:41:23,dave,10.0.1.11,video-stream.tv,ALLOWED,streaming,773,59777,200
 2026-07-30T09:41:23,svc-backup,10.0.1.99,sync-cdn.net,ALLOWED,uncategorized,256,512,200
@@ -2665,6 +2666,7 @@ SENSOR GLITCH ###
 2026-07-30T11:06:55,bob,10.0.1.7,video-stream.tv,ALLOWED,streaming,262,19374,200
 2026-07-30T11:06:55,mallory,10.0.1.15,file-drop.io,BLOCKED,cloud-storage,413,3858,403
 2026-07-30T11:06:55,mallory,10.0.1.15,daily-wire.net,ALLOWED,news,1503,1162,200
+2026-07-30T11:07:00,grace,10.0.1.13,micr0soft-login.com,ALLOWED,uncategorized,1900,3400,200
 2026-07-30T11:07:04,eve,10.0.1.16,mail-box.com,ALLOWED,email,463,8733,200
 2026-07-30T11:07:07,frank,10.0.1.12,wiki-pedia.org,ALLOWED,reference,823,9127,200
 2026-07-30T11:07:08,eve,10.0.1.16,wiki-pedia.org,ALLOWED,reference,916,24073,200
@@ -5622,6 +5624,7 @@ SENSOR GLITCH ###
 2026-07-30T15:32:15,alice,10.0.1.4,news-site.com,ALLOWED,news,477,34009,200
 2026-07-30T15:32:17,svc-backup,10.0.1.99,sync-cdn.net,ALLOWED,uncategorized,256,512,200
 2026-07-30T15:32:39,eve,10.0.1.16,chat-app.io,ALLOWED,social,669,2696,200
+2026-07-30T15:33:00,grace,10.0.1.13,micr0soft-login.com,ALLOWED,uncategorized,1900,3400,200
 2026-07-30T15:33:10,alice,10.0.1.4,news-site.com,ALLOWED,news,467,4399,200
 2026-07-30T15:33:19,svc-backup,10.0.1.99,sync-cdn.net,ALLOWED,uncategorized,256,512,200
 2026-07-30T15:33:24,heidi,10.0.1.14,backup-vault.com,ALLOWED,cloud-storage,28,12651,200
@@ -6075,8 +6078,8 @@ SENSOR GLITCH ###
 2026-07-30T16:13:42,alice,10.0.1.4,code-forge.dev,ALLOWED,dev-tools,101,51177,200
 2026-07-30T16:13:43,eve,10.0.1.16,chat-app.io,ALLOWED,social,2693,12458,200
 2026-07-30T16:13:48,carol,10.0.1.9,chat-app.io,ALLOWED,social,164,52394,200
-2026-07-30T16:13:58,bob,10.0.1.7,ad-tracker.biz,ALLOWED,ads,497,8255,200
 ,,,,,,,,
+2026-07-30T16:13:58,bob,10.0.1.7,ad-tracker.biz,ALLOWED,ads,497,8255,200
 2026-07-30T16:13:59,mallory,10.0.1.15,pkg-registry.org,ALLOWED,dev-tools,2245,20619,200
 2026-07-30T16:14:02,mallory,10.0.1.15,chat-app.io,ALLOWED,social,605,19785,200
 2026-07-30T16:14:04,heidi,10.0.1.14,mail-box.com,ALLOWED,email,512,84107,200

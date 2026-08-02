@@ -22,7 +22,7 @@ export default function EventsPanel({ uploadId, filter, entityFilter }: Props) {
     setError(null);
     authedFetch(`/api/results/${uploadId}/events?${qs}`)
       .then(async (response) => {
-        if(!response.ok) { throw new Error(`Requested failed (${response.status})`); }
+        if(!response.ok) { throw new Error(`Request failed (${response.status})`); }
         return response.json();
       })
       .then(data => {setEvents(data.events);

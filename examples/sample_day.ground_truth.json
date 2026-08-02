@@ -1,6 +1,6 @@
 {
   "seed": 42,
-  "total_good_lines": 7595,
+  "total_good_lines": 7598,
   "malformed_lines": 3,
   "planted": {
     "rate_spike": {
@@ -36,6 +36,13 @@
       "domain": "xj9-relay.top",
       "user": "carol",
       "time": "2026-07-30T03:12:00"
+    },
+    "hunt_only": {
+      "domain": "micr0soft-login.com",
+      "user": "grace",
+      "src_ip": "10.0.1.13",
+      "hits": 3,
+      "why": "typosquat name; statistically invisible"
     }
   }
 }

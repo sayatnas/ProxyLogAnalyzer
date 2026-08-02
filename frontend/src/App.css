@@ -144,3 +144,108 @@ h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; }
   font-family: ui-monospace, Consolas, monospace;
 }
 .events-table tr.blocked td { color: var(--high); }
+
+.summary {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-top: 1.5rem;
+}
+.summary h2 { margin-top: 0; }
+.summary h3 { font-size: 0.95rem; margin: 1rem 0 0.35rem; }
+.summary ul { margin: 0; padding-left: 1.25rem; }
+.summary li { margin: 0.2rem 0; }
+.generated-by { font-size: 0.8rem; margin-top: 0.75rem; }
+
+.investigate { margin: 0.75rem 0; }
+.investigate-btn {
+  padding: 0.45rem 0.9rem;
+  border: none;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin-right: 0.75rem;
+}
+.investigate-btn:hover { background: #333; }
+.investigate-result {
+  border-left: 3px solid var(--line);
+  padding: 0.25rem 0 0.25rem 1rem;
+  margin-top: 0.5rem;
+}
+.investigate-result p { margin: 0.5rem 0; }
+
+.trace { margin-top: 0.75rem; }
+.trace summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #555;
+  user-select: none;
+}
+.trace-step { margin: 0.6rem 0; }
+.trace-step code {
+  display: block;
+  font-size: 0.8rem;
+  background: #f4f4f6;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px 4px 0 0;
+}
+.trace-step pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.72rem;
+  background: #fafafa;
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  padding: 0.5rem;
+}
+
+.assessment {
+  white-space: pre-line;
+  line-height: 1.7;
+}
+.ent {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+}
+.ent-ip { background: #e7effd; color: #1a4b8f; }
+.ent-domain { background: #fdf0e0; color: #8a4b00; }
+
+.investigate-note h4 {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #777;
+  margin: 0.9rem 0 0.3rem;
+}
+.investigate-note ul { margin: 0; padding-left: 1.25rem; }
+.investigate-note li { margin: 0.25rem 0; }
+.inv-assessment { margin: 0.25rem 0 0.5rem; }
+.inv-next {
+  margin-top: 0.9rem;
+  padding: 0.5rem 0.75rem;
+  background: #f4f7fb;
+  border-left: 3px solid #1a4b8f;
+  border-radius: 0 4px 4px 0;
+}
+
+.leads {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: #fdf8ef;
+  border: 1px solid #e8d9b5;
+  border-radius: 6px;
+}
+.leads h3 { margin-top: 0; }
+.leads h3 .muted { font-size: 0.75rem; font-weight: normal; }
+.lead { margin: 0.6rem 0; }
+.lead p { margin: 0.15rem 0; }
+.lead-why { font-style: italic; color: #6b5b2e; }
+
+.ranking { margin: 0.25rem 0 0; padding-left: 1.4rem; }
+.ranking li { margin: 0.35rem 0; }

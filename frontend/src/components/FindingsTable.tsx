@@ -1,10 +1,12 @@
 import { Fragment, useState } from "react";
 import type { Finding } from "../types";
 import EventsPanel from "./EventsPanel";
+import InvestigatePanel from "./InvestigatePanel";
 
 interface Props {
   findings: Finding[];
   uploadId: string;
+  detectors: string[];
 }
 
 function severityOf(confidence: number): string {
@@ -17,20 +19,23 @@ function severityOf(confidence: number): string {
   }
 }
 
-export default function FindingsTable({ findings, uploadId }: Props) {
+export default function FindingsTable({ findings, uploadId, detectors }: Props) {
   const [openRow, setOpenRow] = useState<string | null>(null);
+  const detectorList = detectors.join(", ");
   if (findings.length === 0) {
     return (
       <section>
         <h2>Findings</h2>
-        <p className="muted">No anomalies detected.</p>
+        <p className="muted">
+          No anomalies detected. Checked by {detectors.length} detectors: {detectorList}.
+        </p>
       </section>
     );
   }
 
   return (
     <section>
-      <h2>Findings ({findings.length}) <span className="muted" style={{fontSize: "0.8rem", fontWeight: "normal"}}>click a row to see the log lines that support the finding</span></h2>
+      <h2>Findings ({findings.length}) <span className="muted" style={{fontSize: "0.8rem", fontWeight: "normal"}}>from {detectors.length} detectors ({detectorList}); click a row to see the supporting log lines</span></h2>
       <table className="findings">
         <thead>
           <tr>
@@ -64,6 +69,7 @@ export default function FindingsTable({ findings, uploadId }: Props) {
               {openRow === key && (
                 <tr>
                   <td colSpan={7}>
+                    <InvestigatePanel uploadId={uploadId} finding={finding} />
                     <EventsPanel
                       uploadId={uploadId}
                       filter={finding.filter}

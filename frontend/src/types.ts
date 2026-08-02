@@ -43,6 +43,40 @@ export interface Stats {
   time_range: { start: string; end: string };
 }
 
+export interface Lead {
+  entity: string;
+  observation?: string;
+  why_suspicious: string;
+  confidence?: number;
+  filter?: Record<string, string>;
+}
+
+export interface Summary {
+  assessment: "benign" | "suspicious" | "malicious" | "inconclusive";
+  summary: string;
+  correlations: string[];
+  recommended_actions: string[];
+  leads?: Lead[];
+  generated_by: string;
+  steps?: number;
+  tokens?: number;
+  trace?: TraceStep[];
+}
+
+export interface TraceStep {
+  tool: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
+}
+
+export interface Investigation {
+  assessment: string;
+  steps: number;
+  tokens?: number;
+  generated_by: string;
+  trace?: TraceStep[];
+}
+
 export interface AnalysisResult {
   upload_id: string;
   filename: string;
@@ -50,4 +84,5 @@ export interface AnalysisResult {
   stats: Stats;
   timeline: TimelineEvent[];
   findings: Finding[];
+  detectors: string[];
 }
