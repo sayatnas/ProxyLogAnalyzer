@@ -21,8 +21,6 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Analyses are held in memory, keyed by upload id, each tagged with its owner
-# so one user cannot read another's results. Lost on restart; the raw uploaded
-# file on disk is the durable copy.
 ANALYSES: dict[str, dict] = {}
 
 ensure_demo_user()
@@ -46,8 +44,7 @@ def login():
     data = request.get_json(silent=True) or {}
     username = data.get('username', '')
     password = data.get('password', '')
-    # Same message for an unknown user and a wrong password, so the response
-    # cannot be used to discover which usernames exist.
+    # Same message for an unknown user and a wrong password
     if not authenticate(username, password):
         return jsonify({'error': 'invalid credentials'}), 401
     return jsonify({'token': create_token(username), 'username': username})
@@ -69,9 +66,7 @@ def summarize(records: list[dict], skipped: int) -> dict:
 
 
 def build_charts(records: list[dict]) -> dict:
-    """Chart data the frontend draws: request volume over time and top hosts
-    by bytes sent. Bucketing adapts to the log's span so any log gets ~120
-    bars regardless of whether it covers ten minutes or a week."""
+    """Chart data the frontend draws. Bucketing adapts to the log's span size."""
     times = [r["ts"] for r in records]
     start, end = min(times), max(times)
     span = max((end - start).total_seconds(), 1)
@@ -161,8 +156,6 @@ def upload():
 @require_auth
 def get_results(upload_id):
     entry = ANALYSES.get(upload_id)
-    # 404 rather than 403 when it belongs to someone else: a 403 would confirm
-    # that the upload exists.
     if entry is None or entry['owner'] != g.username:
         return jsonify({'error': 'unknown upload id'}), 404
     return jsonify(entry['result'])
@@ -174,8 +167,7 @@ MAX_EVENTS = 200
 @app.route('/api/results/<upload_id>/summarize', methods=['POST'])
 @require_auth
 def generate_summary(upload_id):
-    """AI triage summary, on demand. Cached on the analysis after the first
-    call so repeat clicks are free."""
+    """AI triage summary"""
     entry = ANALYSES.get(upload_id)
     if entry is None or entry['owner'] != g.username:
         return jsonify({'error': 'unknown upload id'}), 404
@@ -198,11 +190,7 @@ def generate_summary(upload_id):
 @app.route('/api/results/<upload_id>/investigate', methods=['POST'])
 @require_auth
 def investigate(upload_id):
-    """Run the investigation agent against one finding.
-
-    On demand rather than automatic: the loop costs money and seconds, so it
-    runs when an analyst asks for it, not on every upload.
-    """
+    """Run the investigation agent against one finding."""
     entry = ANALYSES.get(upload_id)
     if entry is None or entry['owner'] != g.username:
         return jsonify({'error': 'unknown upload id'}), 404
@@ -228,13 +216,7 @@ def investigate(upload_id):
 @app.route('/api/results/<upload_id>/events')
 @require_auth
 def get_events(upload_id):
-    """Pivot: the log lines behind a finding.
-
-    Re-reads the uploaded file rather than holding parsed records in memory,
-    so memory does not grow with the number of uploads. At ~150ms for 7.5k
-    lines this is fine at prototype scale; at volume the events would live in
-    an indexed store instead.
-    """
+    """Pivot: the log lines behind a finding."""
     entry = ANALYSES.get(upload_id)
     if entry is None or entry['owner'] != g.username:
         return jsonify({'error': 'unknown upload id'}), 404
@@ -263,9 +245,9 @@ def get_events(upload_id):
 
 
 if __name__ == '__main__':
-    # 0.0.0.0 so the app is reachable inside a container; debug only when
-    # asked for, never on a public deployment (the debugger is a code
-    # execution hole).
+    # 0.0.0.0 so the app is reachable inside a container. Debug is opt-in
+    # (FLASK_DEBUG=1 for local auto-reload): the debug console can execute
+    # code on the server, so no deployment may inherit it by default.
     app.run(host='0.0.0.0',
             port=int(os.environ.get('PORT', 5000)),
-            debug=os.environ.get('FLASK_DEBUG', '1') == '1')
+            debug=os.environ.get('FLASK_DEBUG', '0') == '1')

@@ -56,10 +56,10 @@ def test_exfiltration_found(day):
 
 
 def test_no_false_positives(day):
-    # Exactly one finding per implemented detector; ordinary traffic,
-    # mallory's blocked browsing, and the hunt-only typosquat must not fire.
+    # Exactly one finding per detector; ordinary traffic and the hunt-only
+    # typosquat (3 hits, above the rare threshold on purpose) must not fire.
     _, _, findings, _ = day
-    assert len(findings) == 3, [f["entity"] for f in findings]
+    assert len(findings) == 5, [f["entity"] for f in findings]
 
 
 def test_every_finding_has_the_contract_fields(day):
@@ -71,14 +71,29 @@ def test_every_finding_has_the_contract_fields(day):
         assert 0.0 <= f["confidence"] <= 1.0
 
 
-@pytest.mark.skip(reason="detector not implemented; planted anomaly documented in ground truth")
-def test_blocked_burst_found():
-    pass
+def test_blocked_burst_found(day):
+    _, _, findings, truth = day
+    planted = truth["planted"]["blocked_burst"]
+    hits = [f for f in findings if f["detector"] == "blocked_burst"]
+    assert len(hits) == 1
+    assert hits[0]["entity"] == planted["user"]
+    assert hits[0]["evidence"]["blocked_ratio"] > 0.5
 
 
-@pytest.mark.skip(reason="detector not implemented; planted anomaly documented in ground truth")
-def test_rare_destination_found():
-    pass
+def test_rare_destination_found(day):
+    _, _, findings, truth = day
+    planted = truth["planted"]["rare_destination"]
+    hits = [f for f in findings if f["detector"] == "rare_destination"]
+    assert len(hits) == 1
+    assert hits[0]["entity"] == planted["domain"]
+
+
+def test_typosquat_stays_invisible_to_detectors(day):
+    # The hunt-only plant must never become a statistical finding; it exists
+    # to prove what the AI sweep adds over the detectors.
+    _, _, findings, truth = day
+    typo = truth["planted"]["hunt_only"]["domain"]
+    assert all(typo not in f["entity"] for f in findings)
 
 
 def test_small_log_is_clean():

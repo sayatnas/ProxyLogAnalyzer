@@ -1,4 +1,4 @@
-"""AI layer.
+﻿"""AI layer.
 
   triage_findings()     tool-augmented triage of all findings, on demand
   investigate_finding() bounded tool loop over one finding, on demand
@@ -17,6 +17,9 @@ log = logging.getLogger(__name__)
 
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
 MAX_AGENT_STEPS = 10
+
+EFFORT = os.environ.get("OPENAI_REASONING_EFFORT", "")
+_EFFORT_KWARGS = {"reasoning_effort": EFFORT} if EFFORT else {}
 
 try:
     from openai import OpenAI
@@ -162,26 +165,19 @@ def triage_findings(stats: dict, findings: list[dict], registry: dict,
         except (TypeError, json.JSONDecodeError) as exc:
             log.warning("triage returned invalid JSON: %s", exc)
             return _fallback_summary(findings)
-        # The model sometimes expresses "lines" as a JSON array; the UI
+        # The model sometimes expresses "lines" as a JSON array
         # contract is a string, so normalise before validating.
         if isinstance(data.get("summary"), list):
             data["summary"] = "\n".join(str(s) for s in data["summary"])
         if data.get("assessment") not in ASSESSMENTS or not data.get("summary"):
             log.warning("triage failed validation: %s", data)
             return _fallback_summary(findings)
-        # With no findings the model tends to rank normal activity as if it
-        # were findings; stamp the true provenance rather than trusting the
-        # prompt to.
+        # With no findings the model tends to rank normal activity as if it were findings
         if not findings:
             data["summary"] = ("No detector findings; AI sweep observations only.\n"
                                + data["summary"])
-        # A lead the UI can render needs entity and why_suspicious; drop
-        # anything malformed rather than trusting the prompt was followed.
-        # Leads must also not duplicate a finding: the sweep exists for what
-        # the detectors did NOT flag. Exact match against the findings'
-        # atomic identifiers, not substring: a lead that merely mentions a
-        # flagged host alongside a new domain must survive, because hiding a
-        # real lead is worse than showing a duplicate.
+        # drop malformed leads
+        # Leads must also not duplicate a finding
         flagged = set()
         for f in findings:
             flagged.update(f.get("entity", "").replace("->", " ").split())
@@ -197,14 +193,10 @@ def triage_findings(stats: dict, findings: list[dict], registry: dict,
                 if lead["entity"].strip() in flagged:
                     continue
                 cleaned.append(lead)
-        # Strongest first, so if the cap ever truncates it drops the weakest
-        # leads, not whichever the model happened to list last. The floor
-        # exists because rarity collapses as a signal on small logs (every
-        # domain is single-host) and the model reports the noise at honestly
-        # low confidence; observed junk sits at 0.3-0.47, real leads at 0.56+.
+        # drop weak leads
         cleaned = [l for l in cleaned if (l.get("confidence") or 0) >= 0.5]
         cleaned.sort(key=lambda l: l.get("confidence") or 0, reverse=True)
-        data["leads"] = cleaned[:5]
+        data["leads"] = cleaned[:5] # cap at 5
         correlations = data.get("correlations")
         data["correlations"] = correlations[:3] if isinstance(correlations, list) else []
         data.update({"generated_by": MODEL, "steps": steps,
@@ -215,13 +207,16 @@ def triage_findings(stats: dict, findings: list[dict], registry: dict,
         for _ in range(MAX_AGENT_STEPS):
             response = _client.chat.completions.create(
                 model=MODEL, messages=messages, tools=tools,
-                response_format={"type": "json_object"},
+                response_format={"type": "json_object"}, **_EFFORT_KWARGS,
             )
             tokens += response.usage.total_tokens
             message = response.choices[0].message
             if not message.tool_calls:
                 return finish(message.content)
             messages.append(message)
+            # The model sometimes narrates intent alongside tool requests,
+            # surface it on the step's first trace entry.
+            narration = unscrub(message.content) if message.content else None
             for call in message.tool_calls:
                 args = json.loads(unscrub(call.function.arguments))
                 fn = registry.get(call.function.name)
@@ -229,14 +224,16 @@ def triage_findings(stats: dict, findings: list[dict], registry: dict,
                     result = fn(**args) if fn else {"error": "unknown tool"}
                 except Exception as exc:
                     result = {"error": str(exc)}
-                trace.append({"tool": call.function.name, "arguments": args,
-                              "result": result})
+                trace.append({"step": steps + 1, "tool": call.function.name,
+                              "arguments": args, "result": result,
+                              "narration": narration})
+                narration = None
                 messages.append({"role": "tool", "tool_call_id": call.id,
                                  "content": scrub(json.dumps(result, default=str))})
             steps += 1
         response = _client.chat.completions.create(
             model=MODEL, messages=messages, tools=tools, tool_choice="none",
-            response_format={"type": "json_object"},
+            response_format={"type": "json_object"}, **_EFFORT_KWARGS,
         )
         tokens += response.usage.total_tokens
         return finish(response.choices[0].message.content)
@@ -287,12 +284,9 @@ TYPE_MAP = {str: "string", int: "integer", float: "number", bool: "boolean"}
 def _json_type(hint) -> dict:
     """Translate one Python type hint into a JSON Schema property."""
     origin = get_origin(hint)
-    # `str | None` (types.UnionType) or Optional[str] (typing.Union): the None
-    # half only marks the parameter as optional, so describe the real type.
     if origin in (Union, types.UnionType):
         args = [a for a in get_args(hint) if a is not type(None)]
         return _json_type(args[0])
-    # Literal["ALLOWED", "BLOCKED"] becomes an enum of those exact values.
     if origin is Literal:
         return {"type": "string", "enum": list(get_args(hint))}
     return {"type": TYPE_MAP.get(hint, "string")}
@@ -319,8 +313,7 @@ def investigate_finding(finding: dict, registry: dict, pseudo=None) -> dict:
         return {"assessment": "AI investigation unavailable (no API key configured).",
                 "steps": 0, "generated_by": "fallback"}
 
-    # Pseudonymization happens at the wire: everything sent is scrubbed,
-    # everything received is unscrubbed. Tools and the loop see real values.
+    # Pseudonymization
     scrub = pseudo.scrub if pseudo else (lambda t: t)
     unscrub = pseudo.unscrub if pseudo else (lambda t: t)
 
@@ -339,35 +332,45 @@ def investigate_finding(finding: dict, registry: dict, pseudo=None) -> dict:
     #AGENT LOOP:
     steps = 0
     tokens = 0
-    # Every tool call is recorded for the UI's "show the agent's work" panel:
-    # real values (the analyst's view), not the aliases sent to the model.
     trace = []
-    for _ in range(MAX_AGENT_STEPS):
+    # an API failure mid-loop degrades to a fallback response instead of a 500.
+    try:
+        for _ in range(MAX_AGENT_STEPS):
+            response = _client.chat.completions.create(
+                model=MODEL, messages=messages, tools=tools, **_EFFORT_KWARGS
+            )
+            tokens += response.usage.total_tokens
+            message = response.choices[0].message
+            if not message.tool_calls:
+                return {"assessment": unscrub(message.content), "steps": steps,
+                        "tokens": tokens, "trace": trace, "generated_by": MODEL}
+            messages.append(message)
+            narration = unscrub(message.content) if message.content else None
+            for call in message.tool_calls:
+                args = json.loads(unscrub(call.function.arguments))
+                fn = registry.get(call.function.name)
+                try:
+                    result = fn(**args) if fn else {"error": "unknown tool"}
+                except Exception as exc:
+                    result = {"error": str(exc)}
+                trace.append({"step": steps + 1, "tool": call.function.name,
+                              "arguments": args, "result": result,
+                              "narration": narration})
+                narration = None
+                messages.append({"role": "tool", "tool_call_id": call.id,
+                                 "content": scrub(json.dumps(result, default=str))})
+            steps += 1
+        #Last call with tools disabled so model conclude with gathered information:
         response = _client.chat.completions.create(
-            model=MODEL, messages=messages, tools=tools
+            model=MODEL, messages=messages, tools=tools, tool_choice="none",
+            **_EFFORT_KWARGS
         )
         tokens += response.usage.total_tokens
-        message = response.choices[0].message
-        if not message.tool_calls:
-            return {"assessment": unscrub(message.content), "steps": steps,
-                    "tokens": tokens, "trace": trace, "generated_by": MODEL}
-        messages.append(message)
-        for call in message.tool_calls:
-            args = json.loads(unscrub(call.function.arguments))
-            fn = registry.get(call.function.name)
-            try:
-                result = fn(**args) if fn else {"error": "unknown tool"}
-            except Exception as exc:
-                result = {"error": str(exc)}
-            trace.append({"tool": call.function.name, "arguments": args,
-                          "result": result})
-            messages.append({"role": "tool", "tool_call_id": call.id,
-                             "content": scrub(json.dumps(result, default=str))})
-        steps += 1
-    #Last call with tools disabled so model conclude with gathered information:
-    response = _client.chat.completions.create(
-        model=MODEL, messages=messages, tools=tools, tool_choice="none"
-    )
-    tokens += response.usage.total_tokens
-    return {"assessment": unscrub(response.choices[0].message.content),
-            "steps": steps, "tokens": tokens, "trace": trace, "generated_by": MODEL}
+        return {"assessment": unscrub(response.choices[0].message.content),
+                "steps": steps, "tokens": tokens, "trace": trace, "generated_by": MODEL}
+    except Exception as exc:
+        log.warning("investigation loop failed: %s", exc)
+        return {"assessment": "AI investigation failed partway (API error). "
+                              "The detector finding is unaffected; try again.",
+                "steps": steps, "tokens": tokens, "trace": trace,
+                "generated_by": "fallback"}

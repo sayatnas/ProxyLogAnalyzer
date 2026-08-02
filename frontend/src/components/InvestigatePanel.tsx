@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { authedFetch } from "../api";
 import { highlight } from "../highlight";
 import type { Finding, Investigation } from "../types";
@@ -153,7 +153,7 @@ export default function InvestigatePanel({ uploadId, finding, cachedResult, onRe
           })()}
           <p className="muted generated-by">
             {result.generated_by} · {result.steps}{" "}
-            {result.steps === 1 ? "round" : "rounds"} of tool calls
+            {result.steps === 1 ? "step" : "steps"}
             {result.tokens ? ` · ${result.tokens.toLocaleString()} tokens` : ""}
           </p>
 
@@ -163,17 +163,26 @@ export default function InvestigatePanel({ uploadId, finding, cachedResult, onRe
                 Show the agent's work ({result.trace.length}{" "}
                 {result.trace.length === 1 ? "tool call" : "tool calls"})
               </summary>
-              {result.trace.map((step, i) => (
-                <div key={i} className="trace-step">
-                  <code>
-                    {step.tool}(
-                    {Object.entries(step.arguments)
-                      .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-                      .join(", ")}
-                    )
-                  </code>
-                  <pre>{JSON.stringify(step.result, null, 2)}</pre>
-                </div>
+              {result.trace.map((entry, i) => (
+                <Fragment key={i}>
+                  {entry.step !== undefined &&
+                    (i === 0 || entry.step !== result.trace![i - 1].step) && (
+                      <div className="trace-round">Step {entry.step}</div>
+                    )}
+                  {entry.narration && (
+                    <p className="trace-narration">{entry.narration}</p>
+                  )}
+                  <div className="trace-step">
+                    <code>
+                      {entry.tool}(
+                      {Object.entries(entry.arguments)
+                        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                        .join(", ")}
+                      )
+                    </code>
+                    <pre>{JSON.stringify(entry.result, null, 2)}</pre>
+                  </div>
+                </Fragment>
               ))}
             </details>
           )}

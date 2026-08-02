@@ -64,9 +64,11 @@ export interface Summary {
 }
 
 export interface TraceStep {
+  step?: number;
   tool: string;
   arguments: Record<string, unknown>;
   result: unknown;
+  narration?: string | null;
 }
 
 export interface Investigation {

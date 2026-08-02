@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { authedFetch } from "../api";
 import { highlight } from "../highlight";
 import type { Summary } from "../types";
@@ -126,7 +126,7 @@ export default function SummaryPanel({ uploadId }: Props) {
         {fallback
           ? "AI summary unavailable; showing a template summary."
           : `${summary.generated_by}` +
-            (summary.steps !== undefined ? ` · ${summary.steps} ${summary.steps === 1 ? "round" : "rounds"} of tool calls` : "") +
+            (summary.steps !== undefined ? ` · ${summary.steps} ${summary.steps === 1 ? "step" : "steps"}` : "") +
             (summary.tokens ? ` · ${summary.tokens.toLocaleString()} tokens` : "") +
             ". AI ranks and verifies the statistical findings; it does not decide what is anomalous."}
       </p>
@@ -137,17 +137,26 @@ export default function SummaryPanel({ uploadId }: Props) {
             Show the triage's work ({summary.trace.length}{" "}
             {summary.trace.length === 1 ? "tool call" : "tool calls"})
           </summary>
-          {summary.trace.map((step, i) => (
-            <div key={i} className="trace-step">
-              <code>
-                {step.tool}(
-                {Object.entries(step.arguments)
-                  .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-                  .join(", ")}
-                )
-              </code>
-              <pre>{JSON.stringify(step.result, null, 2)}</pre>
-            </div>
+          {summary.trace.map((entry, i) => (
+            <Fragment key={i}>
+              {entry.step !== undefined &&
+                (i === 0 || entry.step !== summary.trace![i - 1].step) && (
+                  <div className="trace-round">Step {entry.step}</div>
+                )}
+              {entry.narration && (
+                <p className="trace-narration">{entry.narration}</p>
+              )}
+              <div className="trace-step">
+                <code>
+                  {entry.tool}(
+                  {Object.entries(entry.arguments)
+                    .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                    .join(", ")}
+                  )
+                </code>
+                <pre>{JSON.stringify(entry.result, null, 2)}</pre>
+              </div>
+            </Fragment>
           ))}
         </details>
       )}

@@ -175,19 +175,82 @@ def detect_exfiltration(records: list[dict]) -> list[dict]:
 
 
 def detect_blocked_burst(records: list[dict]) -> list[dict]:
-    return []
+    findings = []
+    totals = defaultdict(int)
+    blocked = defaultdict(int)
+    first = {}
+    last = {}
+    for record in records:
+        user = record["user"]
+        totals[user] += 1
+        if record["action"] == "BLOCKED":
+            blocked[user] += 1
+            if user not in first or record["ts"] < first[user]:
+                first[user] = record["ts"]
+            if user not in last or record["ts"] > last[user]:
+                last[user] = record["ts"]
+    for user, total in totals.items():
+        if total < MIN_REQUESTS_FOR_RATIO:
+            continue
+        ratio = blocked[user] / total
+        if ratio <= BLOCKED_RATIO_MAX:
+            continue
+        findings.append({
+            "detector": "blocked_burst",
+            "entity": user,
+            "mitre": "T1071",
+            "confidence": round(min(0.95, 0.4 + ratio * 0.6), 2),
+            "reason": f"{ratio:.0%} of {user}'s {total} requests were blocked (threshold: {BLOCKED_RATIO_MAX:.0%})",
+            "evidence": {
+                "requests": total,
+                "blocked": blocked[user],
+                "blocked_ratio": round(ratio, 3),
+            },
+            "first_seen": first[user].isoformat(),
+            "last_seen": last[user].isoformat(),
+            "filter": {"user": user, "action": "BLOCKED"},
+            "entity_filter": {"user": user},
+        })
+    return findings
 
 
 def detect_rare_destination(records: list[dict]) -> list[dict]:
-    return []
+    # Domains almost nobody visits AND the proxy cannot categorise.
+    findings = []
+    hits = defaultdict(list)
+    for record in records:
+        if record["category"] == "uncategorized":
+            hits[record["domain"]].append(record)
+    for domain, rows in hits.items():
+        if len(rows) > RARE_DOMAIN_MAX_HITS:
+            continue
+        hosts = {r["src_ip"] for r in rows}
+        times = sorted(r["ts"] for r in rows)
+        findings.append({
+            "detector": "rare_destination",
+            "entity": domain,
+            "mitre": "T1568",
+            "confidence": 0.6,
+            "reason": f"{domain}: {len(rows)} request(s) from {len(hosts)} host(s), uncategorized domain",
+            "evidence": {
+                "hits": len(rows),
+                "distinct_hosts": len(hosts),
+                "hosts": sorted(hosts),
+            },
+            "first_seen": times[0].isoformat(),
+            "last_seen": times[-1].isoformat(),
+            "filter": {"domain": domain},
+            "entity_filter": {"domain": domain},
+        })
+    return findings
 
 
-# The UI reports this list as "what checked your log", so it holds only
-# implemented detectors; the stubs above join it when they do something.
 DETECTORS = [
     detect_rate_spike,
     detect_beaconing,
     detect_exfiltration,
+    detect_blocked_burst,
+    detect_rare_destination,
 ]
 
 

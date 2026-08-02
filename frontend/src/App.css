@@ -293,3 +293,20 @@ h2 { font-size: 1.2rem; margin: 2rem 0 0.75rem; }
   margin-top: 2px;
 }
 .intervals-axis { max-width: 320px; }
+
+.sample-link { margin-top: 0.5rem; font-size: 0.85rem; }
+
+.trace-round {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #999;
+  margin: 0.7rem 0 0.2rem;
+}
+
+.trace-narration {
+  font-style: italic;
+  color: #777;
+  font-size: 0.8rem;
+  margin: 0.1rem 0 0.3rem;
+}

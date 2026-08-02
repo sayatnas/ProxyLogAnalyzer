@@ -1,0 +1,10 @@
+# Never bake secrets or local state into the image. .gitignore does not
+# apply to Docker builds; without this file `COPY . .` would ship .env
+# (real API key), the venv, and every past upload.
+.env
+.venv/
+uploads/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/

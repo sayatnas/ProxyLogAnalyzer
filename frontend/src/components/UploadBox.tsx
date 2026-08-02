@@ -37,6 +37,19 @@ export default function UploadBox({ onStart, onSuccess, onError, onSessionExpire
         }
       });
   };
+  // The example log ships with the site (frontend/public), so the reviewer
+  // can try the app without hunting for a file.
+  const handleSample = async () => {
+    try {
+      const response = await fetch("/sample_day.log");
+      if (!response.ok) throw new Error(`sample fetch failed (${response.status})`);
+      const blob = await response.blob();
+      handleFile(new File([blob], "sample_day.log"));
+    } catch (error) {
+      onError(String(error));
+    }
+  };
+
   return (
     <div className="upload">
       <label className="upload-label">
@@ -52,6 +65,9 @@ export default function UploadBox({ onStart, onSuccess, onError, onSessionExpire
           }}
         />
       </label>
+      <button className="link sample-link" onClick={handleSample}>
+        or analyze the included example log (one day, planted anomalies)
+      </button>
     </div>
   );
 }
